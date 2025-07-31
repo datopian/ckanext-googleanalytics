@@ -42,28 +42,34 @@ class AnalyticsPostThread(threading.Thread):
     def run(self):
         while True:
             data = self.queue.get()
-            if tk.config.get("googleanalytics.measurement_id"):
-                log.debug("Sending API event to Google Analytics: GA4")
-                measure_id = tk.config.get("googleanalytics.measurement_id")
-                api_secret = tk.config.get("googleanalytics.api_secret")
-                res = requests.post(
-                    u"https://www.google-analytics.com/mp/collect?measurement_id={0}&api_secret={1}".format(measure_id, api_secret),
-                    headers={'user-agent': 'CPython/2.7', 'content-type': 'application/json'},
-                    data=json.dumps(data),
-                    timeout=10,
-                )
-            else:
-                log.debug("Sending API event to Google Analytics: " + data)
-                # send analytics
-                data = dict([(k, v.encode('utf-8') if isinstance(v, str) else v) for k, v in data.items()])
-                res = requests.post(
-                    "http://www.google-analytics.com/collect",
-                    headers={'user-agent': 'CPython/2.7'},
-                    data=data,
-                    timeout=10,
-                )
-                # signals to queue job is done
-            self.queue.task_done()
+            try:
+                if tk.config.get("googleanalytics.measurement_id"):
+                    log.debug("Sending API event to Google Analytics: GA4")
+                    measure_id = tk.config.get("googleanalytics.measurement_id")
+                    api_secret = tk.config.get("googleanalytics.api_secret")
+                    res = requests.post(
+                        u"https://www.google-analytics.com/mp/collect?measurement_id={0}&api_secret={1}".format(measure_id, api_secret),
+                        headers={'user-agent': 'CPython/2.7', 'content-type': 'application/json'},
+                        data=json.dumps(data),
+                        timeout=10,
+                    )
+                    log.info("Successfully sent data to Google Analytics: " + str(res.status_code))
+                else:
+                    log.debug("Sending API event to Google Analytics: " + data)
+                    # send analytics
+                    data = dict([(k, v.encode('utf-8') if isinstance(v, str) else v) for k, v in data.items()])
+                    res = requests.post(
+                        "http://www.google-analytics.com/collect",
+                        headers={'user-agent': 'CPython/2.7'},
+                        data=data,
+                        timeout=10,
+                    )
+                    # signals to queue job is done
+                self.queue.task_done()
+            except requests.exceptions.RequestException as e:
+                log.error("Error sending analytics data to Google Analytics: %s", e)
+                self.queue.task_done()
+            
 
 
 class GoogleAnalyticsPlugin(GAMixinPlugin, p.SingletonPlugin):
